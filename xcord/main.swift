@@ -2,10 +2,14 @@
 //  main.swift
 //  xcord
 //
-//  Created by Nimai Goswami on 9/17/26.
-//
 
+import AppKit
+import ApplicationServices
 import Foundation
 
-print("Hello, World!")
+_ = NSWorkspace.shared
+_ = AXIsProcessTrusted()
+
+let config = ConfigStore.load()
+print("Loaded config: \(config)")
 
