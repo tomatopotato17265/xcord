@@ -159,3 +159,66 @@ final class DiscordIPCTransport {
         return Data(bytes: &le, count: MemoryLayout<Int32>.size)
     }
 }
+
+final class DiscordIPC {
+    private let clientID: String
+    private let transport = DiscordIPCTransport()
+
+    var isConnected: Bool { transport.isConnected }
+
+    init(clientID: String) {
+        self.clientID = clientID
+    }
+
+    func connect() throws {
+        try transport.connect()
+
+        do {
+            let handshake: [String: Any] = ["v": 1, "client_id": clientID]
+            try transport.writeFrame(opcode: .handshake, payload: try Self.jsonData(handshake))
+
+            let (opcode, payload) = try transport.readFrame()
+            guard opcode == DiscordOpcode.frame.rawValue else {
+                throw DiscordIPCError.connectionClosed
+            }
+
+            if let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+               let evt = json["evt"] as? String, evt == "ERROR" {
+                Log.error("Discord rejected handshake: \((json["data"] as? [String: Any])?["message"] as? String ?? "unknown error")")
+                throw DiscordIPCError.connectionClosed
+            }
+        } catch {
+            transport.close()
+            throw error
+        }
+    }
+
+    func setActivity(_ activity: DiscordActivity?) throws {
+        var args: [String: Any] = ["pid": Int(ProcessInfo.processInfo.processIdentifier)]
+        args["activity"] = activity?.jsonObject
+
+        let command: [String: Any] = [
+            "cmd": "SET_ACTIVITY",
+            "args": args,
+            "nonce": UUID().uuidString,
+        ]
+
+        try transport.writeFrame(opcode: .frame, payload: try Self.jsonData(command))
+
+        _ = try? transport.readFrame()
+    }
+
+    func clearActivity() throws {
+        try setActivity(nil)
+    }
+
+    func close() {
+        guard transport.isConnected else { return }
+        try? transport.writeFrame(opcode: .close, payload: Data())
+        transport.close()
+    }
+
+    private static func jsonData(_ object: [String: Any]) throws -> Data {
+        try JSONSerialization.data(withJSONObject: object)
+    }
+}
