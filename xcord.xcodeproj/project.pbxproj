@@ -19,6 +19,7 @@
 
 /* Begin PBXFileReference section */
 		81A1AC85305CCC5000C1026F /* xcord */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = xcord; sourceTree = BUILT_PRODUCTS_DIR; };
+		81A1AC90305CCC5000C1026F /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -42,6 +43,7 @@
 			isa = PBXGroup;
 			children = (
 				81A1AC87305CCC5000C1026F /* xcord */,
+				81A1AC90305CCC5000C1026F /* README.md */,
 				81A1AC86305CCC5000C1026F /* Products */,
 			);
 			sourceTree = "<group>";
