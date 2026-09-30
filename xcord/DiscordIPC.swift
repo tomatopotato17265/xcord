@@ -77,6 +77,9 @@ final class DiscordIPCTransport {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw DiscordIPCError.socketCreationFailed(errno: errno) }
 
+        var noSigPipe: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
 
@@ -204,8 +207,7 @@ final class DiscordIPC {
         ]
 
         try transport.writeFrame(opcode: .frame, payload: try Self.jsonData(command))
-
-        _ = try? transport.readFrame()
+        _ = try transport.readFrame()
     }
 
     func clearActivity() throws {

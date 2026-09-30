@@ -7,7 +7,6 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-
 guard let xcode = XcodeProcessTracker.runningXcode() else {
     Log.info("Xcode is not running — exiting.")
     exit(0)
@@ -27,22 +26,64 @@ guard config.discordClientID != XcordConfig.placeholderClientID else {
 let sessionStart = Date()
 let discord = DiscordIPC(clientID: config.discordClientID)
 
-do {
-    try discord.connect()
-    Log.info("Connected to Discord.")
-} catch {
-    Log.error("Failed to connect to Discord: \(error)")
-    exit(1)
+// MARK: - Discord connection with reconnect/backoff
+
+var isDiscordConnected = false
+var reconnectDelay: TimeInterval = 1
+let maxReconnectDelay: TimeInterval = 30
+var reconnectTimer: Timer?
+var pendingActivity: DiscordActivity?
+var hasLoggedDisconnected = false
+
+func scheduleReconnect() {
+    isDiscordConnected = false
+    reconnectTimer?.invalidate()
+
+    let delay = reconnectDelay
+    reconnectDelay = min(reconnectDelay * 2, maxReconnectDelay)
+
+    reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { _ in
+        connectToDiscord()
+    }
+}
+
+func connectToDiscord() {
+    do {
+        try discord.connect()
+        isDiscordConnected = true
+        hasLoggedDisconnected = false
+        reconnectDelay = 1
+        reconnectTimer?.invalidate()
+        reconnectTimer = nil
+        Log.info("Connected to Discord.")
+
+        if let pendingActivity {
+            try? discord.setActivity(pendingActivity)
+        }
+    } catch {
+        if !hasLoggedDisconnected {
+            Log.warn("Discord isn't reachable yet (\(error)) — will keep retrying quietly.")
+            hasLoggedDisconnected = true
+        }
+        scheduleReconnect()
+    }
 }
 
 func publish(_ document: XcodeDocument?) {
     let activity = ActivityBuilder.buildActivity(document: document, config: config, startTimestamp: sessionStart)
+    pendingActivity = activity
+
+    guard isDiscordConnected else { return }
+
     do {
         try discord.setActivity(activity)
     } catch {
-        Log.error("Failed to set activity: \(error)")
+        Log.warn("Lost connection to Discord while setting activity (\(error)) — reconnecting.")
+        scheduleReconnect()
     }
 }
+
+connectToDiscord()
 
 let observer = XcodeObserver(xcode: xcode)
 observer.onDocumentChange = { document in
@@ -62,6 +103,7 @@ publish(observer.currentDocument())
 let lifecycleWatcher = XcodeLifecycleWatcher(xcode: xcode)
 lifecycleWatcher.onTerminate = {
     Log.info("Xcode quit — shutting down.")
+    reconnectTimer?.invalidate()
     try? discord.clearActivity()
     discord.close()
     exit(0)
